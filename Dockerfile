@@ -12,5 +12,6 @@ RUN ["cargo", "build", "--release"]
 
 FROM ubuntu
 COPY --from=build /target/release/osint-api /osint-api
+CMD ["/osint-api"]
 ARG PORT
 EXPOSE $PORT
