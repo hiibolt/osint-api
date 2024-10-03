@@ -1,5 +1,3 @@
-use crate::Tally;
-
 use std::collections::HashSet;
 
 use tungstenite::connect;
@@ -23,8 +21,8 @@ impl Sherlock {
         &self,
         usernames: &HashSet<String>, 
         allow_all: bool
-    ) -> Result<Tally> {
-        let mut tally = Tally::default();
+    ) -> Result<Vec<String>> {
+        let mut ret = Vec::new();
 
         let mut invalid_usernames = HashSet::new();
         let mut valid_usernames = HashSet::new();
@@ -67,7 +65,7 @@ impl Sherlock {
                     if text.contains("http") || text.contains("https") {
                         println!("Found site for {username}: {text}");
                         
-                        tally.usernames += 1usize;
+                        ret.push(text);
                     }
                 } else {
                     break;
@@ -88,7 +86,7 @@ impl Sherlock {
             println!("{}", ignored_addendum);
         }
     
-        Ok(tally)
+        Ok(ret)
     }
     fn is_valid_sherlock_username ( 
         username: &str,

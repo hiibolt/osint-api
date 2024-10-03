@@ -1,5 +1,3 @@
-use crate::Tally;
-
 use anyhow::{ Result, Context };
 use serde::Deserialize;
 
@@ -20,9 +18,7 @@ impl BulkVS {
                 .context("Couldn't find API key in environment! Be sure to set `BULKVS_API_KEY`.")?
         })
     }
-    pub fn query_phone_number ( &self, phone_number: &str ) -> Result<Tally> {
-        let mut tally = Tally::default();
-
+    pub fn query_phone_number ( &self, phone_number: &str ) -> Result<BulkVSPhoneNumberResponse> {
         let path = format!(
             "https://cnam.bulkvs.com/?id={}&did={}&format=json",
             self.api_key,
@@ -38,10 +34,6 @@ impl BulkVS {
         let res: BulkVSPhoneNumberResponse = serde_json::from_str(&resp_object_string)
             .context("Failed to deserialize response!")?;
 
-        if res.name.is_some() && res.name != Some("INVALID CALL".into()) {
-            tally.names += 1;
-        }
-
-        Ok(tally)
+        Ok(res)
     }
 }
