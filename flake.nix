@@ -52,7 +52,7 @@
             xorg.libXi
             xorg.libXrandr
             xorg.libxcb
-          ];
+          ]; 
           */
 
           shellHook = ''clear && printf "do them proud :)\n\n" && export RESET='\033[00m' && export PINK='\033[01;35m' && export PS1="$PINK(nix)$RESET $PS1"'';
