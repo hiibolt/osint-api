@@ -104,13 +104,44 @@ async fn main() -> Result<()> {
     app_state.database
         .lock().await.verify_db()
         .context("Failed to verify database connection!")?;
+    
+    // Build each route set
+    let tele_routes = Router::new()
+        .route( "/bulkvs_cnam", post(crate::routes::tele::bulkvs_cnam::bulkvs_cnam) );
+
+    let xref_routes = Router::new()
+        .route( "/sherlock", post(crate::routes::xref::sherlock::sherlock) );
+    
+    let geo_routes = Router::new()
+        .route( "/snusbase", post(crate::routes::geo::snusbase::snusbase_geo) );
+    
+    let hashes_routes = Router::new()
+        .route( "/snusbase/:pii_type", post(crate::routes::hashes::snusbase::snusbase_hashing) );
+    
+    let tally_routes = Router::new()
+        .route( "/:target_api/:pii_type", post(crate::routes::tally_api) );
+    
+    let nocodb_routes = Router::new()
+        .route("/users/get",    post(crate::routes::nocodb::get_user       ) )
+        .route("/users/create", post(crate::routes::nocodb::create_user    ) )
+        .route("/users/fund",   post(crate::routes::nocodb::offset_balance ) );
+    
+    let db_routes = Router::new()
+        .route("/snusbase/:pii_type", post(crate::routes::db::snusbase::snusbase_query) );
+
+    // Build the API routes
+    let api_v1 = Router::new()
+        .nest("/tally", tally_routes)
+        .nest("/nocodb", nocodb_routes)
+        .nest("/tele", tele_routes)
+        .nest("/xref", xref_routes)
+        .nest("/geo", geo_routes)
+        .nest("/hashes", hashes_routes)
+        .nest("/db", db_routes)
+        .with_state(app_state);
 
     let app = Router::new()
-        .route("/api/tally/:target_api/:pii_type", post(crate::routes::tally_api          ) )
-        .route("/api/db/users/get",                post(crate::routes::db::get_user       ) )
-        .route("/api/db/users/create",             post(crate::routes::db::create_user    ) )
-        .route("/api/db/users/fund",               post(crate::routes::db::offset_balance ) )
-        .with_state(app_state);
+        .nest("/api/v1", api_v1);
 
     let port = std::env::var("PORT")
         .context("Missing PORT env variable!")?;
@@ -119,7 +150,6 @@ async fn main() -> Result<()> {
     println!("Listening on {port}, address {address}...");
     let listener = tokio::net::TcpListener::bind(&address).await
         .context("Failed to bind to address!")?;
-
 
     axum::serve(listener, app).await
         .map_err(|e| anyhow!("{:?}", e))

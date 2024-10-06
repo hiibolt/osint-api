@@ -1,7 +1,12 @@
-use std::collections::HashSet;
-
 use tungstenite::connect;
-use anyhow::{Result, Context};
+use anyhow::{Result, Context, anyhow};
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SherlockResponse {
+    pub username: String,
+    pub sites: Vec<String>
+}
 
 pub struct Sherlock { }
 impl Sherlock {
@@ -19,72 +24,52 @@ impl Sherlock {
     }
     pub async fn get_and_stringify_potential_profiles(
         &self,
-        usernames: &HashSet<String>, 
+        username: String, 
         allow_all: bool
-    ) -> Result<Vec<String>> {
+    ) -> Result<SherlockResponse> {
         let mut ret = Vec::new();
-
-        let mut invalid_usernames = HashSet::new();
-        let mut valid_usernames = HashSet::new();
-    
-        for username in usernames.iter() {
-            // If the username is bad, let the user know.
-            if !Self::is_valid_sherlock_username(&username, allow_all) {
-                invalid_usernames.insert(username.clone());
-    
-                continue;
-            }
-    
-            valid_usernames.insert(username.clone());
-        }
-    
-        // Query Sherlock
-        for username in valid_usernames.iter() {
-            println!("Querying Sherlock for {username}");
-    
-            let sherlock_ws_url = std::env::var("SHERLOCK_WS_URL")
-                .expect("SHERLOCK_WS_URL not set!");
-            let (
-                mut socket,
-                response
-            ) = connect(&sherlock_ws_url)
-                .context("Can't connect to Sherlock! Is the Sherlock REST API started?")?;
-            let status = response.status();
-    
-            println!("Connected to Sherlock API!");
-            println!("Response HTTP code: {status}");
-    
-            socket.send(tungstenite::protocol::Message::Text(format!("{username}")))
-                .context("Failed to send message to Sherlock API!")?;
-    
-            loop {
-                let message = socket.read()
-                    .context("Failed to read message from Sherlock API!")?;
-    
-                if let tungstenite::protocol::Message::Text(text) = message {
-                    if text.contains("http") || text.contains("https") {
-                        println!("Found site for {username}: {text}");
-                        
-                        ret.push(text);
-                    }
-                } else {
-                    break;
-                }
-            }
+        
+        // If the username is bad, let the user know.
+        if !Self::is_valid_sherlock_username(&username, allow_all) {
+            return Err(anyhow!("Username would produce very poor results!"));
         }
         
-        if invalid_usernames.len() > 0 {
-            let mut ignored_addendum = String::from("Ignored Usernames:\n");
-            
-            ignored_addendum += &invalid_usernames.into_iter()
-                .map(|username| format!("- {username}"))
-                .collect::<Vec<String>>()
-                .join("\n");
-    
-            ignored_addendum += "\n\nThese usernames would produce poor results from Sherlock. You can always run them manually with the OSINT section :)\n`>>osint sherlock <username>`";
-    
-            println!("{}", ignored_addendum);
+        println!("Querying Sherlock for {username}");
+
+        let sherlock_ws_url = std::env::var("SHERLOCK_WS_URL")
+            .expect("SHERLOCK_WS_URL not set!");
+        let (
+            mut socket,
+            response
+        ) = connect(&sherlock_ws_url)
+            .context("Can't connect to Sherlock! Is the Sherlock REST API started?")?;
+        let status = response.status();
+
+        println!("Connected to Sherlock API!");
+        println!("Response HTTP code: {status}");
+
+        socket.send(tungstenite::protocol::Message::Text(format!("{username}")))
+            .context("Failed to send message to Sherlock API!")?;
+
+        loop {
+            let message = socket.read()
+                .context("Failed to read message from Sherlock API!")?;
+
+            if let tungstenite::protocol::Message::Text(text) = message {
+                if text.contains("http") || text.contains("https") {
+                    println!("Found site for {username}: {text}");
+                    
+                    ret.push(text);
+                }
+            } else {
+                break;
+            }
         }
+
+        let ret = SherlockResponse {
+            username,
+            sites: ret
+        };
     
         Ok(ret)
     }

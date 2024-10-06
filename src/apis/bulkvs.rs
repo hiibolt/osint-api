@@ -1,11 +1,11 @@
 use anyhow::{ Result, Context };
-use serde::Deserialize;
+use serde::{ Serialize, Deserialize };
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BulkVSPhoneNumberResponse {
-    pub name: Option<String>,
-    pub _number: Option<String>,
-    pub _time: Option<i64>
+    pub name:   Option<String>,
+    pub number: Option<String>,
+    pub time:   Option<i64>
 }
 #[derive(Debug)]
 pub struct BulkVS {

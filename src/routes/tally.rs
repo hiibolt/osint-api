@@ -362,13 +362,12 @@ pub async fn tally_api (
 
                     let sherlock = app.sherlock.lock().await;
 
-                    let usernames = vec![pii];
-
                     tally.usernames += sherlock
                         .get_and_stringify_potential_profiles(
-                            &usernames.into_iter().collect(),
+                            pii,
                             false
                         ).await?
+                        .sites
                         .len();
 
                     return Ok(Json(tally))
