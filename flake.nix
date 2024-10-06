@@ -65,7 +65,7 @@
           #LD_LIBRARY_PATH = libPath;
           OPENSSL_LIB_DIR = pkgs.openssl.out + "/lib";
         };
-      in
+      in 
       {
         defaultPackage = localRustBuild;
 
