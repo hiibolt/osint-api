@@ -30,7 +30,6 @@ pub struct NocoDB {
     api_keys_table_id:       String,
     api_usage_table_id:      String,
     api_usage_link_field_id: String,
-    purchase_table_id:       String,
 }
 impl NocoDB {
     pub fn new() -> Result<Self> {
@@ -44,9 +43,7 @@ impl NocoDB {
             api_usage_table_id: std::env::var("API_USAGE_TABLE_ID")
                 .context("API_USAGE_TABLE_ID must be set")?,
             api_usage_link_field_id: std::env::var("API_USAGE_LINK_FIELD_ID")
-                .context("API_USAGE_LINK_FIELD_ID must be set")?,
-            purchase_table_id: std::env::var("PURCHASE_TABLE_ID")
-                .context("PURCHASE_TABLE_ID must be set")?
+                .context("API_USAGE_LINK_FIELD_ID must be set")?
         })
     }
     pub fn verify_db ( &self ) -> Result<()> {
