@@ -1,4 +1,4 @@
-use crate::{ AppState, AppError };
+use crate::helper::types::{ AppState, AppError };
 use crate::apis::database::User;
 
 use std::ops::Deref;
@@ -13,12 +13,11 @@ use anyhow::{ anyhow, Result, Context };
 
 pub async fn get_user ( 
     State(app): State<AppState>,
-    headers: HeaderMap,
-    user: Json<User>
+    headers: HeaderMap
 ) -> Result<Json<User>, AppError> {
     // Get the API key in the `Authorization` header
     let api_key = headers.get("Authorization")
-        .ok_or_else(|| anyhow!("Missing \"Authorization\" header!"))?
+        .ok_or_else(|| anyhow!("Missing \'Authorization\' header!"))?
         .to_str()
         .map_err(|e| anyhow!("{e:?}"))?
         .to_owned();
@@ -28,9 +27,16 @@ pub async fn get_user (
         return Err(anyhow!("Invalid API key!").into());
     }
 
+    // Get the user's API key in the `Authorization` header
+    let user_api_key = headers.get("User-API-Key")
+        .ok_or_else(|| anyhow!("Missing \'User-API-Key\' header!"))?
+        .to_str()
+        .map_err(|e| anyhow!("{e:?}"))?
+        .to_owned();
+
     Ok(Json(app.database
         .lock().await
-        .get_user(user.deref().clone())?))
+        .get_user(user_api_key)?))
 }
 pub async fn create_user ( 
     State(app): State<AppState>,
@@ -39,7 +45,7 @@ pub async fn create_user (
 ) -> Result<Json<User>, AppError> {
     // Get the API key in the `Authorization` header
     let api_key = headers.get("Authorization")
-        .ok_or_else(|| anyhow!("Missing \"Authorization\" header!"))?
+        .ok_or_else(|| anyhow!("Missing \'Authorization\' header!"))?
         .to_str()
         .map_err(|e| anyhow!("{e:?}"))?
         .to_owned();
@@ -56,11 +62,11 @@ pub async fn create_user (
 pub async fn offset_balance ( 
     State(app): State<AppState>,
     headers: HeaderMap,
-    user: Json<User>
+    amount: String
 ) -> Result<Json<User>, AppError> {
     // Get the API key in the `Authorization` header
     let api_key = headers.get("Authorization")
-        .ok_or_else(|| anyhow!("Missing \"Authorization\" header!"))?
+        .ok_or_else(|| anyhow!("Missing \'Authorization\' header!"))?
         .to_str()
         .map_err(|e| anyhow!("{e:?}"))?
         .to_owned();
@@ -70,7 +76,18 @@ pub async fn offset_balance (
         return Err(anyhow!("Invalid API key!").into());
     }
 
+    // Get the user's API key in the `Authorization` header
+    let user_api_key = headers.get("User-API-Key")
+        .ok_or_else(|| anyhow!("Missing \'User-API-Key\' header!"))?
+        .to_str()
+        .map_err(|e| anyhow!("{e:?}"))?
+        .to_owned();
+    
+    // Convert the amount to a number
+    let amount = amount.parse::<i32>()
+        .context("Failed to parse amount!")?;
+
     Ok(Json(app.database
         .lock().await
-        .offset_balance(user.deref().clone())?))
+        .offset_balance(user_api_key, amount)?))
 }

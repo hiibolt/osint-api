@@ -1,4 +1,4 @@
-use crate::{ AppState, AppError, PII };
+use crate::helper::types::{ AppState, AppError, PII };
 use crate::apis::snusbase::SnusbaseHashLookupResponse;
 
 use axum::{
@@ -14,34 +14,41 @@ pub async fn snusbase_hashing (
     headers: HeaderMap,
     pii: String
 ) -> Result<Json<SnusbaseHashLookupResponse>, AppError> {
-    // Get the API key in the `Authorization` header
-    let api_key = headers.get("Authorization")
-        .ok_or_else(|| anyhow!("Missing \"Authorization\" header!"))?
-        .to_str()
-        .map_err(|e| anyhow!("{e:?}"))?
-        .to_owned();
-    
-    // Check it
-    if !app.verify_api_key(api_key).context("Failed to verify API key!")? {
-        return Err(anyhow!("Invalid API key!").into());
-    }
+    // Verify the API key
+    app.verify_api_key_header(&headers)?;
 
-    // Check if it's a rehash or dehash
+    let cost = crate::COST_PER_HASHES_SNUSBASE;
+
+    // Verify the user has enough balance
+    app.verify_user_api_key_has_balance(
+        &app,
+        &headers, 
+        cost
+    ).await?;
+
+    // Query Snusbase
     let response = match pii_type {
         PII::Password => {
             app.snusbase
                 .lock().await
-                .rehash(pii)
+                .rehash(pii.clone())
                 .await
         },
         PII::Hash => {
             app.snusbase
                 .lock().await
-                .dehash(pii)
+                .dehash(pii.clone())
                 .await
         },
         _ => Err(anyhow!("Invalid PII type!").into())
     }.context("Failed to get Hashing results from Snusbase!")?;
+
+    // Deduct the cost from the user's balance
+    app.deduct_cost_and_log(
+        &app,
+        &headers, 
+        ("Hashing".to_string(), "Snusbase".to_string(), pii_type, pii, cost),
+    ).await?;
 
     Ok(Json(response))
 }

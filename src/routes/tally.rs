@@ -1,4 +1,4 @@
-use crate::{ API, AppState, PII, AppError };
+use crate::helper::types::{ API, AppState, PII, AppError };
 
 use std::collections::HashSet;
 use axum::{
@@ -31,30 +31,8 @@ pub async fn tally_api (
     headers: HeaderMap,
     pii: String
 ) -> Result<Json<Tally>, AppError> {
-    // Extract the API key from the headers
-    let api_key = headers.get("Authorization")
-        .ok_or_else(|| anyhow!("Missing \"Authorization\" header!"))?
-        .to_str()
-        .map_err(|e| anyhow!("{e:?}"))?
-        .to_owned();
-    
-    println!(
-        "Received request:\n\tAPI: {:?}\n\tPII: '{}' ({:?})\n\tAPI Key: '{}'",
-        api, pii, pii_type, api_key
-    );
-
-    // Ensure the API key is valid
-    let api_keys: Vec<String> = std::env::var("API_KEYS")
-        .context("Missing API_KEYS env variable!")?
-        .split(',')
-        .map(|s| s.to_string())
-        .collect();
-
-    println!("API keys: {api_keys:?}");
-
-    if !api_keys.contains(&api_key) {
-        Err(anyhow!("Invalid API key: '{api_key}'"))?;
-    }
+    // Verify the API key
+    app.verify_api_key_header(&headers)?;
 
     match api {
         API::SnusbaseQuery => {

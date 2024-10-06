@@ -1,11 +1,23 @@
+use crate::helper::types::PII;
+
 use serde::{Deserialize, Serialize};
 use anyhow::{ Result, anyhow, Context };
 use serde_json::{ json, Value };
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct User {
     pub api_key: String,
-    pub balance: Option<i32>,
+    pub balance: i32,
+    #[serde(rename = "Id")]
+    pub id:      Option<usize>
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct APIUsage {
+    pub category: String,
+    pub service:  String,
+    pub pii_type: PII,
+    pub pii:      String,
+    pub cost:     i32,
     #[serde(rename = "Id")]
     pub id:      Option<usize>
 }
@@ -16,11 +28,9 @@ pub struct NocoDB {
     base_url:                String,
 
     api_keys_table_id:       String,
-    tally_usage_table_id:    String,
-    sherlock_usage_table_id: String,
+    api_usage_table_id:      String,
+    api_usage_link_field_id: String,
     purchase_table_id:       String,
-    bulkvs_table_id:         String,
-    snusbase_table_id:       String
 }
 impl NocoDB {
     pub fn new() -> Result<Self> {
@@ -31,16 +41,12 @@ impl NocoDB {
                 .context("NOCODB_URL must be set")?,
             api_keys_table_id: std::env::var("API_KEYS_TABLE_ID")
                 .context("API_KEYS_TABLE_ID must be set")?,
-            tally_usage_table_id: std::env::var("TALLY_USAGE_TABLE_ID")
-                .context("TALLY_USAGE_TABLE_ID must be set")?,
-            sherlock_usage_table_id: std::env::var("SHERLOCK_USAGE_TABLE_ID")
-                .context("SHERLOCK_USAGE_TABLE_ID must be set")?,
+            api_usage_table_id: std::env::var("API_USAGE_TABLE_ID")
+                .context("API_USAGE_TABLE_ID must be set")?,
+            api_usage_link_field_id: std::env::var("API_USAGE_LINK_FIELD_ID")
+                .context("API_USAGE_LINK_FIELD_ID must be set")?,
             purchase_table_id: std::env::var("PURCHASE_TABLE_ID")
-                .context("PURCHASE_TABLE_ID must be set")?,
-            bulkvs_table_id: std::env::var("BULKVS_TABLE_ID")
-                .context("BULKVS_TABLE_ID must be set")?,
-            snusbase_table_id: std::env::var("SNUSBASE_TABLE_ID")
-                .context("SNUSBASE_TABLE_ID must be set")?
+                .context("PURCHASE_TABLE_ID must be set")?
         })
     }
     pub fn verify_db ( &self ) -> Result<()> {
@@ -79,16 +85,16 @@ impl NocoDB {
 
         Ok(users)
     }
-    pub fn get_user ( &self, user: User ) -> Result<User> {
+    pub fn get_user ( &self, user_api_key: String ) -> Result<User> {
         let users = self.get_users()?;
 
         for user in &users {
-            if user.api_key == user.api_key {
+            if user.api_key == user_api_key {
                 return Ok((*user).clone());
             }
         }
 
-        Err(anyhow!("User API key `{:?}` does not exist!", user.api_key).into())
+        Err(anyhow!("User API key '{}' does not exist!", &user_api_key).into())
     }
     pub fn create_user ( &self, user: User ) -> Result<User> {
         // First, verify that the user does not exist
@@ -96,15 +102,11 @@ impl NocoDB {
 
         for current_user in &users {
             if current_user.api_key == user.api_key {
-                return Err(anyhow!("User API key `{:?}` already exists!", user.api_key).into());
+                return Err(anyhow!("User API key `{}` already exists!", user.api_key).into());
             }
         }
 
-        // If the user doesn't have a balance, set it to 0
         let mut user = user;
-        if user.balance.is_none() {
-            user.balance = Some(0);
-        }
 
         let url = format!("{}/api/v2/tables/{}/records", self.base_url, self.api_keys_table_id);
 
@@ -132,18 +134,12 @@ impl NocoDB {
         
         Ok(user)
     }
-    pub fn offset_balance ( &self, user: User ) -> Result<User> {
+    pub fn offset_balance ( &self, user_api_key: String, amount: i32 ) -> Result<User> {
         // Verify the user exists
-        let old_user = self.get_user(user.clone())
+        let mut user = self.get_user(user_api_key)
             .context("User does not exist!")?;
         
-        let new_balance: i32 = old_user.balance.unwrap_or(0) + user.balance.unwrap_or(0);
-
-        let mut user = user;
-        user.balance = Some(new_balance);
-        if new_balance < 0 {
-            user.balance = Some(0);
-        }
+        user.balance = (user.balance + amount).max(0);
 
         let url = format!("{}/api/v2/tables/{}/records", self.base_url, self.api_keys_table_id);
 
@@ -152,7 +148,7 @@ impl NocoDB {
             .set("xc-token", &self.api_key)
             .set("Content-Type", "application/json")
             .send_json(json!([{
-                "Id":      old_user.id,
+                "Id":      user.id,
                 "api_key": user.api_key,
                 "balance": user.balance
             }]))
@@ -174,5 +170,72 @@ impl NocoDB {
             .context("Response was missing `Id` field!")?;
 
         Ok(user)
+    }
+    pub fn create_api_usage_log (
+        &self,
+        api_usage_log: APIUsage,
+        user_api_key: String
+    ) -> Result<()> {
+        let mut log = api_usage_log.clone();
+
+        // Build the log creation URL
+        let create_log_url = format!("{}/api/v2/tables/{}/records", self.base_url, self.api_usage_table_id);
+
+        // Use the `ureq` crate to send a POST request to the database
+        let response = ureq::post(&create_log_url)
+            .set("xc-token", &self.api_key)
+            .set("Content-Type", "application/json")
+            .send_json(json!({
+                "category": log.category,
+                "service":  log.service,
+                "pii_type": log.pii_type,
+                "pii":      log.pii,
+                "cost":     log.cost
+            }))
+            .context("Failed to send the request!")?;
+
+        let response_string = response.into_string()
+            .context("Failed to convert response into string!")?;
+        
+        let response_value = serde_json::from_str::<Value>(&response_string)
+            .context("Response was not valid JSON!")?;
+        
+        // Extract the log's ID
+        let log_id = response_value.get("Id")
+            .context("Response was missing `Id` field!")?;
+        
+        log.id = Some(serde_json::from_value(log_id.clone())
+            .context("Failed to deserialize response!")?);
+
+        // Get the user's ID
+        let user = self.get_user(user_api_key)
+            .context("User does not exist!")?;
+        
+        // Build the table link URL
+        let link_log_url = format!(
+            "{}/api/v2/tables/{}/links/{}/records/{}",
+            self.base_url,
+            self.api_keys_table_id,
+            self.api_usage_link_field_id,
+            user.id.context("User ID was not set!")?
+        );
+
+        // Use the `ureq` crate to send a POST request to the database
+        let response = ureq::post(&link_log_url)
+            .set("xc-token", &self.api_key)
+            .set("Content-Type", "application/json")
+            .send_json(json!([{
+                "Id": log.id.context("Log ID was not set!")?,
+            }]))
+            .context("Failed to send the request!")?;
+        
+        let response_string = response.into_string()
+            .context("Failed to convert response into string!")?;
+
+        if response_string != "true" {
+            return Err(anyhow!("Failed to link the log to the user!").into());
+        }
+        
+        Ok(())
     }
 }

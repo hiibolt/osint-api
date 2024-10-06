@@ -1,4 +1,4 @@
-use crate::{ AppState, AppError, PII };
+use crate::helper::types::{ AppState, AppError, PII };
 use crate::apis::snusbase::SnusbaseDBResponse;
 
 use axum::{
@@ -6,7 +6,7 @@ use axum::{
     extract::{State, Path},
     Json
 };
-use anyhow::{ Result, anyhow, Context };
+use anyhow::{ Result, anyhow };
 
 pub async fn snusbase_query ( 
     State(app): State<AppState>,
@@ -14,48 +14,55 @@ pub async fn snusbase_query (
     headers: HeaderMap,
     pii: String
 ) -> Result<Json<SnusbaseDBResponse>, AppError> {
-    // Get the API key in the `Authorization` header
-    let api_key = headers.get("Authorization")
-        .ok_or_else(|| anyhow!("Missing \"Authorization\" header!"))?
-        .to_str()
-        .map_err(|e| anyhow!("{e:?}"))?
-        .to_owned();
-    
-    // Check it
-    if !app.verify_api_key(api_key).context("Failed to verify API key!")? {
-        return Err(anyhow!("Invalid API key!").into());
-    }
+    // Verify the API key
+    app.verify_api_key_header(&headers)?;
+
+    let cost = crate::COST_PER_DB_SNUSBASE;
+
+    // Verify the user has enough balance
+    app.verify_user_api_key_has_balance(
+        &app,
+        &headers, 
+        cost
+    ).await?;
 
     // Query Snusbase
     let res = match pii_type {
         PII::Email => app.snusbase.lock()
                 .await
-                .get_by_email(pii)
+                .get_by_email(pii.clone())
                 .await?,
         PII::Username => app.snusbase.lock()
                 .await
-                .get_by_username(pii)
+                .get_by_username(pii.clone())
                 .await?,
         PII::Hash => app.snusbase.lock()
                 .await
-                .get_by_hash(pii)
+                .get_by_hash(pii.clone())
                 .await?,
         PII::Ip => app.snusbase.lock()
                 .await
-                .get_by_last_ip(pii)
+                .get_by_last_ip(pii.clone())
                 .await?,
         PII::Name => app.snusbase.lock()
                 .await
-                .get_by_name(pii)
+                .get_by_name(pii.clone())
                 .await?,
         PII::Password => app.snusbase.lock()
                 .await
-                .get_by_password(pii)
+                .get_by_password(pii.clone())
                 .await?,
         _ => {
             return Err(anyhow!("Invalid PII type for Snusbase Query API!"))?;
         }
     };
+
+    // Deduct the cost from the user's balance
+    app.deduct_cost_and_log(
+        &app,
+        &headers, 
+        ("DB".to_string(), "Snusbase".to_string(), pii_type, pii, cost),
+    ).await?;
 
     Ok(Json(res))
 }

@@ -1,4 +1,4 @@
-use crate::{ AppState, AppError };
+use crate::helper::types::{ AppState, AppError, PII };
 use crate::apis::snusbase::SnusbaseIPResponse;
 
 use axum::{
@@ -6,30 +6,37 @@ use axum::{
     extract::State,
     Json
 };
-use anyhow::{ Result, anyhow, Context };
+use anyhow::{ Result, Context };
 
 pub async fn snusbase_geo ( 
     State(app): State<AppState>,
     headers: HeaderMap,
     ip: String
 ) -> Result<Json<SnusbaseIPResponse>, AppError> {
-    // Get the API key in the `Authorization` header
-    let api_key = headers.get("Authorization")
-        .ok_or_else(|| anyhow!("Missing \"Authorization\" header!"))?
-        .to_str()
-        .map_err(|e| anyhow!("{e:?}"))?
-        .to_owned();
-    
-    // Check it
-    if !app.verify_api_key(api_key).context("Failed to verify API key!")? {
-        return Err(anyhow!("Invalid API key!").into());
-    }
+    // Verify the API key
+    app.verify_api_key_header(&headers)?;
+
+    let cost = crate::COST_PER_GEO_SNUSBASE;
+
+    // Verify the user has enough balance
+    app.verify_user_api_key_has_balance(
+        &app,
+        &headers, 
+        cost
+    ).await?;
 
     // Get the response from BulkVS
     let response = app.snusbase
         .lock().await
-        .whois_ip_query(vec!(ip)).await
+        .whois_ip_query(vec!(ip.clone())).await
         .context("Failed to get Geolocation results from Snusbase!")?;
+
+    // Deduct the cost from the user's balance
+    app.deduct_cost_and_log(
+        &app,
+        &headers, 
+        ("Geo".to_string(), "Snusbase".to_string(), PII::Ip, ip, cost),
+    ).await?;
 
     Ok(Json(response))
 }
