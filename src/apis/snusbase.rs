@@ -164,9 +164,16 @@ impl Snusbase {
         if ips.len() == 0 {
             bail!("No IPs to query!");
         }
+
+        // Build a proxied `ureq` client
+        let proxy = ureq::Proxy::new(&std::env::var("PROXY_LINK")
+            .context("PROXY_LINK not set!")?)?;
+        let agent = ureq::AgentBuilder::new()
+            .proxy(proxy)
+            .build();
         
         // Query Snusbase
-        let resp_object = ureq::post("https://api-experimental.snusbase.com/tools/ip-whois")
+        let resp_object = agent.post("https://api-experimental.snusbase.com/tools/ip-whois")
             .set("Auth", &self.api_key )
             .set("Content-Type", "application/json")
             .send_json(ureq::json!({
@@ -190,8 +197,15 @@ impl Snusbase {
         types: Vec<String>,
         wildcard: bool
     ) -> Result<SnusbaseDBResponse> {
+        // Build a proxied `ureq` client
+        let proxy = ureq::Proxy::new(&std::env::var("PROXY_LINK")
+            .context("PROXY_LINK not set!")?)?;
+        let agent = ureq::AgentBuilder::new()
+            .proxy(proxy)
+            .build();
+
         // Query Snusbase
-        let resp_object = ureq::post("https://api-experimental.snusbase.com/data/search")
+        let resp_object = agent.post("https://api-experimental.snusbase.com/data/search")
             .set("Auth", &self.api_key )
             .set("Content-Type", "application/json")
             .send_json(ureq::json!({
@@ -217,8 +231,15 @@ impl Snusbase {
         types: Vec<String>,
         wildcard: bool
     ) -> Result<SnusbaseHashLookupResponse> {
+        // Build a proxied `ureq` client
+        let proxy = ureq::Proxy::new(&std::env::var("PROXY_LINK")
+            .context("PROXY_LINK not set!")?)?;
+        let agent = ureq::AgentBuilder::new()
+            .proxy(proxy)
+            .build();
+
         // Query Snusbase
-        let resp_object = ureq::post("https://api-experimental.snusbase.com/tools/hash-lookup")
+        let resp_object = agent.post("https://api-experimental.snusbase.com/tools/hash-lookup")
             .set("Auth", &self.api_key )
             .set("Content-Type", "application/json")
             .send_json(ureq::json!({

@@ -28,6 +28,7 @@ use anyhow::{ Result, anyhow, Context };
 
 #[tokio::main]
 async fn main() -> Result<()> {
+
     // Build each microservice
     let app_state = AppState {
         sherlock: Arc::new(Mutex::new(Sherlock::new()?)),

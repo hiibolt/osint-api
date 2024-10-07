@@ -19,12 +19,19 @@ impl BulkVS {
         })
     }
     pub fn query_phone_number ( &self, phone_number: &str ) -> Result<BulkVSPhoneNumberResponse> {
+        // Build a proxied `ureq` client
+        let proxy = ureq::Proxy::new(&std::env::var("PROXY_LINK")
+            .context("PROXY_LINK not set!")?)?;
+        let agent = ureq::AgentBuilder::new()
+            .proxy(proxy)
+            .build();
+
         let path = format!(
             "https://cnam.bulkvs.com/?id={}&did={}&format=json",
             self.api_key,
             phone_number);
 
-        let resp_object = ureq::get(&path)
+        let resp_object = agent.get(&path)
             .call()
             .map_err(|e| anyhow::anyhow!("Failed to query CNAM lookup backend! {:?}", e))?;
 
